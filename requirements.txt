@@ -1,0 +1,11 @@
+requests~=2.25.1
+urllib3~=1.26.10
+PyYAML~=6.0
+fastapi~=0.95.0
+APScheduler==3.10.1
+uvicorn~=0.21.1
+python-dateutil~=2.8.2
+prometheus-fastapi-instrumentator
+setuptools~=67.7.2
+infoblox-client==0.6.0
+IPy==1.01
