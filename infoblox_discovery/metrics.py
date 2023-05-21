@@ -22,8 +22,9 @@
 from typing import Dict, List, Any
 
 from prometheus_client.core import GaugeMetricFamily
-from prometheus_client.metrics_core import Metric
+from prometheus_client.metrics_core import Metric, CounterMetricFamily
 
+from infoblox_discovery.cache import Cache, MASTER, MEMBERS, NODES, ZONES, DHCP_RANGES
 from infoblox_discovery.fmglogging import Log
 
 from infoblox_discovery.transform import Transform, LabelsBase
@@ -33,57 +34,73 @@ from infoblox_discovery.transform import Transform, LabelsBase
 log = Log(__name__)
 
 
-class TempMetricDefinition:
-    prefix = 'fmg_'
-    help_prefix = ''
+class IBMetricDefinition:
+    prefix = 'infoblox_'
+    help_prefix = 'Infoblox '
 
     class Labels(LabelsBase):
         def __init__(self):
             super().__init__()
-            self.labels = {'ip': "", 'name': "", 'adom': "", 'platform': ''}
+            self.labels = {MASTER: ""}
 
     @staticmethod
     def metrics_definition() -> Dict[str, Metric]:
-        common_labels = TempMetricDefinition.Labels().get_label_keys()
+        common_labels = IBMetricDefinition.Labels().get_label_keys()
 
         metric_definition = {
-            "conf_status":
-                GaugeMetricFamily(name=f"{TempMetricDefinition.prefix}conf_status",
-                                  documentation=f"{TempMetricDefinition.help_prefix}Configuration status 1==insync "
-                                                f"0==all other states",
+            "cache_collect":
+                CounterMetricFamily(name=f"{IBMetricDefinition.prefix}cache_collect",
+                                  documentation=f"{IBMetricDefinition.help_prefix}total collect count",
                                   labels=common_labels),
-            "conn_status":
-                GaugeMetricFamily(name=f"{TempMetricDefinition.prefix}conn_status",
-                                  documentation=f"{TempMetricDefinition.help_prefix}Connection status 1==up "
-                                                f"0==all other states",
-                                  labels=common_labels),
-            "conn_mode":
-                GaugeMetricFamily(name=f"{TempMetricDefinition.prefix}conn_mode",
-                                  documentation=f"{TempMetricDefinition.help_prefix}Connection mode 1==active "
-                                                f"0==all other states",
-                                  labels=common_labels),
+            "cache_collect_failed":
+                CounterMetricFamily(name=f"{IBMetricDefinition.prefix}cache_collect_failed",
+                                    documentation=f"{IBMetricDefinition.help_prefix}total failed collect count",
+                                    labels=common_labels),
+            "cache_collect_time":
+                GaugeMetricFamily(name=f"{IBMetricDefinition.prefix}cache_collect_time",
+                                    documentation=f"{IBMetricDefinition.help_prefix}time to collect",
+                                    labels=common_labels),
+            "cache_members":
+                CounterMetricFamily(name=f"{IBMetricDefinition.prefix}cache_members",
+                                    documentation=f"{IBMetricDefinition.help_prefix}number of members",
+                                    labels=common_labels),
+            "cache_nodes":
+                CounterMetricFamily(name=f"{IBMetricDefinition.prefix}cache_nodes",
+                                    documentation=f"{IBMetricDefinition.help_prefix}number of nodes",
+                                    labels=common_labels),
+            "cache_zones":
+                CounterMetricFamily(name=f"{IBMetricDefinition.prefix}cache_zones",
+                                    documentation=f"{IBMetricDefinition.help_prefix}number of zones",
+                                    labels=common_labels),
+            "cache_dhcp_ranges":
+                CounterMetricFamily(name=f"{IBMetricDefinition.prefix}cache_dhcp_ranges",
+                                    documentation=f"{IBMetricDefinition.help_prefix}number of dhcp ranges",
+                                    labels=common_labels),
         }
 
         return metric_definition
 
 
-class TempMetric(TempMetricDefinition.Labels):
+class IBMetric(IBMetricDefinition.Labels):
     def __init__(self):
         super().__init__()
-        self.conf_status: float = 0
-        self.conn_status: float = 0
-        self.conn_mode: float = 0
+        self.cache_collect: float = 0
+        self.cache_collect_failed: float = 0
+        self.cache_collect_time: float = 0
+        self.cache_members: float = 0
+        self.cache_nodes: float = 0
+        self.cache_zones: float = 0
+        self.cache_dhcp_ranges: float = 0
 
 
-class TempMetrics(Transform):
-
-    def __init__(self, fws: Dict[str, List[Any]]):
-        self.fws = fws
-        self.all_metrics: List[TempMetric] = []
+class InfobloxMetrics(Transform):
+    def __init__(self, cache:Cache):
+        self.cache = cache
+        self.all_metrics: List[IBMetric] = []
 
     def metrics(self):
 
-        metrics_list = TempMetricDefinition.metrics_definition()
+        metrics_list = IBMetricDefinition.metrics_definition()
         for attribute in metrics_list.keys():
             for m in self.all_metrics:
                 metrics_list[attribute].add_metric(m.get_label_values(),
@@ -93,23 +110,28 @@ class TempMetrics(Transform):
             yield m
 
     def parse(self):
+        metric = IBMetric()
 
-        for adom, fw in self.fws.items():
-            for f in fw:
-                metric = TempMetric()
+        for master, value in self.cache.get_collect_count().items():
+            metric.cache_collect = value
+            metric.add_label(MASTER, master)
 
-                metric.conf_status = TempMetrics.status_mapping(f.conf_status, "insync")
-                metric.conn_status = TempMetrics.status_mapping(f.conn_status, "up")
-                metric.conn_mode = TempMetrics.status_mapping(f.conn_mode, "active")
+        for master, value in self.cache.get_collect_count_failed().items():
+            metric.cache_collect_failed = value
+            metric.add_label(MASTER, master)
 
-                metric.add_label('ip', f.ip)
-                metric.add_label('adom', f.adom)
-                metric.add_label('name', f.name)
-                metric.add_label('platform', f.platform)
-                self.all_metrics.append(metric)
+        for master, value in self.cache.get_collect_time().items():
+            metric.cache_collect_time = value
+            metric.add_label(MASTER, master)
 
-    @staticmethod
-    def status_mapping(status: str, valid: str) -> float:
-        if status == valid:
-            return 1.0
-        return 0.0
+        for master, types in self.cache.get_all().items():
+            for type_name, type in types.items():
+                if type_name == MEMBERS:
+                    metric.cache_members = len(type)
+                if type_name == NODES:
+                    metric.cache_nodes = len(type)
+                if type_name == ZONES:
+                    metric.cache_zones = len(type)
+                if type_name == DHCP_RANGES:
+                    metric.cache_dhcp_ranges = len(type)
+        self.all_metrics.append(metric)

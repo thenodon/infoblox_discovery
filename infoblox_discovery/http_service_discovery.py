@@ -26,29 +26,29 @@ import os
 import secrets
 import sys
 import time
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Callable
 
 import uvicorn
 import yaml
 from fastapi import FastAPI, Request, Response, Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from prometheus_client import CollectorRegistry, Gauge
+from prometheus_client import CollectorRegistry, Gauge, Counter
 from prometheus_client.exposition import CONTENT_TYPE_LATEST
 from prometheus_client.utils import INF, MINUS_INF
 from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_fastapi_instrumentator.metrics import Info
+
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from infoblox_discovery.environments import DISCOVERY_BASIC_AUTH_USERNAME, DISCOVERY_BASIC_AUTH_PASSWORD, \
-    DISCOVERY_BASIC_AUTH_ENABLED, DISCOVERY_LOG_LEVEL, DISCOVERY_HOST, DISCOVERY_PORT, \
-    DISCOVERY_CACHE_TTL
+    DISCOVERY_BASIC_AUTH_ENABLED, DISCOVERY_LOG_LEVEL, DISCOVERY_HOST, DISCOVERY_PORT
 
+from infoblox_discovery.cache import Cache, MEMBERS, NODES, ZONES, DHCP_RANGES, MASTER
 from infoblox_discovery.environments import DISCOVERY_CONFIG
 from infoblox_discovery.exceptions import DiscoveryException
-from infoblox_discovery.infoblox_member import Member
 from infoblox_discovery.api import InfoBlox
 from infoblox_discovery.collector import InfobloxCollector
 from infoblox_discovery.fmglogging import Log
-
 
 
 FORMAT = 'timestamp="%(asctime)s" level=%(levelname)s module="%(module)s" %(message)s'
@@ -79,6 +79,11 @@ app = FastAPI()
 
 @app.on_event("startup")
 def fill_cache():
+    """
+    Collect data from Infoblox
+    The configuration file is read every time
+    :return:
+    """
     with open(os.getenv(DISCOVERY_CONFIG, 'config.yml'), 'r') as config_file:
         try:
             # Converts yaml document to python object
@@ -90,34 +95,42 @@ def fill_cache():
 
     cache = Cache()
     for ib in config.get('infoblox'):
+        start_time = time.time()
         infoblox = InfoBlox(ib)
-        if 'members' in ib.get('discovery'):
-            try:
-                members, nodes = infoblox.get_infoblox_members()
-                cache.put(ib['master'], 'members', list(members.values()))
-                cache.put(ib['master'], 'nodes', list(nodes.values()))
-            except DiscoveryException:
-                log.error(f"Failed to get members for {ib['master']}")
-        if 'dns' in ib.get('discovery'):
-            try:
-                dns = infoblox.get_infoblox_dns()
-                cache.put(ib['master'], 'dns', list(dns.values()))
-            except DiscoveryException:
-                log.error(f"Failed to get zones for {ib['master']}")
+        try:
+            if MEMBERS in ib.get('discovery'):
+                try:
+                    members, nodes = infoblox.get_infoblox_members()
+                    cache.put(ib[MASTER], MEMBERS, list(members.values()))
+                    cache.put(ib[MASTER], NODES, list(nodes.values()))
+                except DiscoveryException as err:
+                    log.error(f"Failed to get members for {ib[MASTER]}")
 
-        if 'dhcp' in ib.get('discovery'):
-            try:
-                dhcp_ranges = infoblox.get_infoblox_dhcp()
-                cache.put(ib['master'], 'dhcp', list(dhcp_ranges.values()))
-            except DiscoveryException:
-                log.error(f"Failed to get dhcp ranges for {ib['master']}")
+            if ZONES in ib.get('discovery'):
+                try:
+                    dns = infoblox.get_infoblox_dns()
+                    cache.put(ib[MASTER], ZONES, list(dns.values()))
+                except DiscoveryException as err:
+                    log.error(f"Failed to get zones for {ib[MASTER]}")
 
-        log.info(f"collect infoblox discovery from {ib['master']}")
+            if DHCP_RANGES in ib.get('discovery'):
+                try:
+                    dhcp_ranges = infoblox.get_infoblox_dhcp()
+                    cache.put(ib[MASTER], DHCP_RANGES, list(dhcp_ranges.values()))
+                except DiscoveryException as err:
+                    log.error(f"Failed to get dhcp ranges for {ib[MASTER]}")
 
+            end_time = time.time()
+            cache.set_collect_time(ib[MASTER], end_time - start_time)
+            log.info(f"collect infoblox discovery from {ib[MASTER]} {end_time-start_time} sec")
+        except DiscoveryException:
+            cache.inc_collect_count_failed(ib[MASTER])
+        finally:
+            cache.inc_collect_count(ib[MASTER])
 
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(fill_cache, 'cron', hour='*')
+scheduler.add_job(fill_cache, 'interval', minutes=60)
 scheduler.start()
 
 # Enable auto instrumentation
@@ -154,52 +167,6 @@ async def basic_auth(credentials: HTTPBasicCredentials = Depends(optional_securi
             headers={"WWW-Authenticate": "Basic"},
         )
     return True
-
-
-class Singleton(type):
-    _instances = {}
-
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
-        return cls._instances[cls]
-
-
-class Config(metaclass=Singleton):
-
-    def __init__(self):
-        self.config = {}
-        with open(os.getenv(DISCOVERY_CONFIG, 'config.yml'), 'r') as config_file:
-            try:
-                self.config = yaml.safe_load(config_file)
-            except yaml.YAMLError as err:
-                log.error(err)
-                sys.exit(1)
-
-    def get(self):
-        return self.config
-
-
-class Cache(metaclass=Singleton):
-
-    def __init__(self):
-        self._ttl: int = int(os.getenv(DISCOVERY_CACHE_TTL, "7200"))
-        self._expire: int = 0
-        # master->type-> data
-        self._cache: Dict[str,Dict[str, List]] = {}
-
-    def put(self, master: str, type: str, data: List[Any]):
-        self._expire = time.time() + self._ttl
-        if master not in self._cache:
-            self._cache[master] = {}
-        self._cache[master][type] = data
-
-    def get(self, master: str, type: str) -> List[Any]:
-        if time.time() < self._expire:
-            log.info_fmt({"operation": "cache", "hit": True})
-            return self._cache[master][type]
-        log.info_fmt({"operation": "cache", "hit": False})
-        return []
 
 
 def floatToGoString(d):
@@ -288,39 +255,31 @@ def generate_latest(metrics_list: list):
             output.extend(lines)
     return ''.join(output).encode('utf-8')
 
-def fill_cache():
-    pass
 
 @app.get('/')
 async def alive(request: Request):
-    #request.app.state.users_events_counter.inc({"path": request.scope["path"]})
     return Response("infoblox_discovery alive!", status_code=status.HTTP_200_OK, media_type=MIME_TYPE_TEXT_HTML)
 
 
 @app.get('/metrics')
-async def get_metrics():
+async def get_metrics(auth: str = Depends(basic_auth)):
     start_time = time.time()
     cache = Cache()
-    fws = cache.get()
-    if not fws:
-        fmg = BigIQ(Config().get())
-        fws = fmg.get_targets()
-        cache.put(fws)
-
     registry = CollectorRegistry()
+
     try:
-        fmg_collector = InfobloxCollector(fws)
+        infoblox_collector = InfobloxCollector(cache)
 
-        registry.register(fmg_collector)
+        registry.register(infoblox_collector)
 
-        duration = Gauge('fmg_scrape_duration_seconds', 'Time spent processing request', registry=registry)
-
-        duration.set(time.time() - start_time)
-
-        fortigate_response = generate_latest(await fmg_collector.collect())
+        duration = Gauge('infoblox_scrape_duration_seconds', 'Time spent processing request', registry=registry)
 
         duration.set(time.time() - start_time)
-        return Response(fortigate_response, status_code=200, media_type=CONTENT_TYPE_LATEST)
+
+        infoblox_metrics = generate_latest(await infoblox_collector.collect())
+
+        duration.set(time.time() - start_time)
+        return Response(infoblox_metrics, status_code=200, media_type=CONTENT_TYPE_LATEST)
     except DiscoveryException as err:
         log.error(err.message)
         return Response(err.message, status_code=err.status, media_type=MIME_TYPE_TEXT_HTML)

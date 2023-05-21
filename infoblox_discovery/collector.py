@@ -23,7 +23,8 @@ from typing import Dict, List, Any
 
 from prometheus_client.registry import Collector, Metric
 
-from infoblox_discovery.metrics import TempMetrics
+from infoblox_discovery.cache import Cache
+from infoblox_discovery.metrics import InfobloxMetrics
 
 
 def to_list(metric_generator) -> List[Metric]:
@@ -36,13 +37,13 @@ def to_list(metric_generator) -> List[Metric]:
 
 
 class InfobloxCollector(Collector):
-
-    def __init__(self, fws: Dict[str, List[Any]]):
-        self.fws = fws
+    def __init__(self, cache: Cache):
+        self.cache = cache
 
     async def collect(self):
         all_module_metrics = []
-        transformer = TempMetrics(self.fws)
+
+        transformer = InfobloxMetrics(self.cache)
         transformer.parse()
         t = to_list(transformer.metrics())
         all_module_metrics.extend(t)
