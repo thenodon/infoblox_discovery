@@ -18,38 +18,33 @@
     along with infoblox-discovery.  If not, see <http://www.gnu.org/licenses/>.
 
 """
-
+import datetime
 import json
 import logging.config as lc
 import math
 import os
 import secrets
-import sys
 import time
-from typing import List, Any, Dict, Callable
+from typing import List, Any
 
 import uvicorn
 import yaml
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Request, Response, Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from prometheus_client import CollectorRegistry, Gauge, Counter
+from prometheus_client import CollectorRegistry, Gauge
 from prometheus_client.exposition import CONTENT_TYPE_LATEST
 from prometheus_client.utils import INF, MINUS_INF
 from prometheus_fastapi_instrumentator import Instrumentator
-from prometheus_fastapi_instrumentator.metrics import Info
 
-
-from apscheduler.schedulers.background import BackgroundScheduler
-from infoblox_discovery.environments import DISCOVERY_BASIC_AUTH_USERNAME, DISCOVERY_BASIC_AUTH_PASSWORD, \
-    DISCOVERY_BASIC_AUTH_ENABLED, DISCOVERY_LOG_LEVEL, DISCOVERY_HOST, DISCOVERY_PORT
-
+from infoblox_discovery.api import InfoBlox
 from infoblox_discovery.cache import Cache, MEMBERS, NODES, ZONES, DHCP_RANGES, MASTER
+from infoblox_discovery.collector import InfobloxCollector
+from infoblox_discovery.environments import DISCOVERY_BASIC_AUTH_USERNAME, DISCOVERY_BASIC_AUTH_PASSWORD, \
+    DISCOVERY_BASIC_AUTH_ENABLED, DISCOVERY_LOG_LEVEL, DISCOVERY_HOST, DISCOVERY_PORT, DISCOVERY_FETCH_INTERVAL
 from infoblox_discovery.environments import DISCOVERY_CONFIG
 from infoblox_discovery.exceptions import DiscoveryException
-from infoblox_discovery.api import InfoBlox
-from infoblox_discovery.collector import InfobloxCollector
 from infoblox_discovery.fmglogging import Log
-
 
 FORMAT = 'timestamp="%(asctime)s" level=%(levelname)s module="%(module)s" %(message)s'
 TIME_FORMAT = "%Y-%m-%dT%H:%M:%S%z"
@@ -77,7 +72,6 @@ log = Log(__name__)
 app = FastAPI()
 
 
-@app.on_event("startup")
 def fill_cache():
     """
     Collect data from Infoblox
@@ -90,7 +84,7 @@ def fill_cache():
             config = yaml.safe_load(config_file)
 
         except yaml.YAMLError as err:
-            log.error(f"Can not open configuration file {config_file.name}")
+            log.error(f"Can not open configuration file {config_file.name} {str(err)}")
             return
 
     cache = Cache()
@@ -103,25 +97,25 @@ def fill_cache():
                     members, nodes = infoblox.get_infoblox_members()
                     cache.put(ib[MASTER], MEMBERS, list(members.values()))
                     cache.put(ib[MASTER], NODES, list(nodes.values()))
-                except DiscoveryException as err:
+                except DiscoveryException:
                     log.error(f"Failed to get members for {ib[MASTER]}")
 
             if ZONES in ib.get('discovery'):
                 try:
-                    dns = infoblox.get_infoblox_dns()
+                    dns = infoblox.get_infoblox_zones()
                     cache.put(ib[MASTER], ZONES, list(dns.values()))
-                except DiscoveryException as err:
+                except DiscoveryException:
                     log.error(f"Failed to get zones for {ib[MASTER]}")
 
             if DHCP_RANGES in ib.get('discovery'):
                 try:
-                    dhcp_ranges = infoblox.get_infoblox_dhcp()
+                    dhcp_ranges = infoblox.get_infoblox_dhcp_ranges()
                     cache.put(ib[MASTER], DHCP_RANGES, list(dhcp_ranges.values()))
-                except DiscoveryException as err:
+                except DiscoveryException:
                     log.error(f"Failed to get dhcp ranges for {ib[MASTER]}")
 
             end_time = time.time()
-            cache.set_collect_time(ib[MASTER], end_time - start_time)
+            cache.set_collect_time(ib[MASTER], int(end_time - start_time))
             log.info(f"collect infoblox discovery from {ib[MASTER]} {end_time-start_time} sec")
         except DiscoveryException:
             cache.inc_collect_count_failed(ib[MASTER])
@@ -129,11 +123,13 @@ def fill_cache():
             cache.inc_collect_count(ib[MASTER])
 
 
-scheduler = BackgroundScheduler()
-scheduler.add_job(fill_cache, 'interval', minutes=60)
-scheduler.start()
+@app.on_event("startup")
+async def run_scheduler():
+    sch = BackgroundScheduler()
+    sch.start()
+    sch.add_job(fill_cache, 'date', run_date=datetime.datetime.now())
+    sch.add_job(fill_cache, 'interval', seconds=int(os.getenv(DISCOVERY_FETCH_INTERVAL, '3600')))
 
-# Enable auto instrumentation
 Instrumentator().instrument(app).expose(app=app, endpoint="/exporter-metrics")
 
 security = HTTPBasic()
