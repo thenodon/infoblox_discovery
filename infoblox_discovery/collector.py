@@ -19,7 +19,7 @@
 
 """
 
-from typing import Dict, List, Any
+from typing import List
 
 from prometheus_client.registry import Collector, Metric
 
