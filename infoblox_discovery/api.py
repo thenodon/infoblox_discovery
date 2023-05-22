@@ -84,7 +84,7 @@ class InfoBlox:
                     or \
                     self.exclusions[MEMBER] in member_data['extattrs'] and \
                     member_data['extattrs'][self.exclusions[MEMBER]]['value'] == 'True':
-                log.info(f"Exclude infoblox member {member_data['host_name']}")
+                log.debug(f"Exclude infoblox member {member_data['host_name']}")
                 continue
 
             member = member_factory(member_data, self.master)
@@ -97,7 +97,7 @@ class InfoBlox:
 
         return members, nodes
 
-    def get_infoblox_dns(self) -> Dict[str, DNS]:
+    def get_infoblox_zones(self) -> Dict[str, DNS]:
         return_fields_range = ['fqdn', 'disable', 'extattrs']
         query = {'view': 'External'}
         try:
@@ -108,7 +108,7 @@ class InfoBlox:
 
         all_dns: Dict[str: DNS] = {}
         for zone_data in zones_data:
-            log.info(f"Dns zone {zone_data['fqdn']}")
+            log.debug(f"Dns zone {zone_data['fqdn']}")
             if self.exclusions[COMMON] in zone_data['extattrs'] and \
                     zone_data['extattrs'][self.exclusions[COMMON]]['value'] == 'True' \
                     or \
@@ -117,7 +117,7 @@ class InfoBlox:
                     or \
                     'disable' in zone_data and \
                     zone_data['disable']:
-                log.info(f"Exclude dns zone {zone_data['fqdn']}")
+                log.debug(f"Exclude dns zone {zone_data['fqdn']}")
                 continue
 
             zone = {}
@@ -137,7 +137,7 @@ class InfoBlox:
 
         return all_dns
 
-    def get_infoblox_dhcp(self) -> Dict[str, DHCP]:
+    def get_infoblox_dhcp_ranges(self) -> Dict[str, DHCP]:
         return_fields_range = ['network', 'dhcp_utilization', 'dhcp_utilization_status', 'extattrs']
         query = {'network_view': 'default'}
 
@@ -153,7 +153,7 @@ class InfoBlox:
                     or \
                     self.exclusions[RANGE] in dhcp_range['extattrs'] and \
                     dhcp_range['extattrs'][self.exclusions[RANGE]]['value'] == 'True':
-                log.info(f"Exclude dhcp scope {dhcp_range['network']}")
+                log.debug(f"Exclude dhcp scope {dhcp_range['network']}")
                 continue
 
             # Remove all configured scopes
