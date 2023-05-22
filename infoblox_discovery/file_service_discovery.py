@@ -55,10 +55,10 @@ def file_service_discovery():
             write_sd_file(members, ib['master'], 'members')
             write_sd_file(nodes, ib['master'], 'nodes')
         if 'dns' in ib.get('discovery'):
-            dns = infoblox.get_infoblox_dns()
+            dns = infoblox.get_infoblox_zones()
             write_sd_file(dns, ib['master'], 'dns')
         if 'dhcp' in ib.get('discovery'):
-            dhcp_ranges = infoblox.get_infoblox_dhcp()
+            dhcp_ranges = infoblox.get_infoblox_dhcp_ranges()
             write_sd_file(dhcp_ranges, ib['master'], 'dhcp_ranges')
 
 
