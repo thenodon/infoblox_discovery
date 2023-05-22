@@ -161,7 +161,7 @@ class InfoBlox:
             if range in self.exclude_ranges:
                 continue
 
-            dhcp = dhcp_factory(dhcp_range['network'],self.master)
+            dhcp = dhcp_factory(dhcp_range['network'], self.master)
             dhcp_ranges[dhcp.network] = dhcp
 
         return dhcp_ranges
