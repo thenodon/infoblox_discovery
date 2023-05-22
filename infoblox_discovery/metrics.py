@@ -110,28 +110,41 @@ class InfobloxMetrics(Transform):
             yield m
 
     def parse(self):
-        metric = IBMetric()
+        metrics: Dict[str, IBMetric] = {}
+
 
         for master, value in self.cache.get_collect_count().items():
-            metric.cache_collect = value
-            metric.add_label(MASTER, master)
+            if master not in metrics:
+                metrics[master] = IBMetric()
+                metrics[master].add_label(MASTER, master)
+            metrics[master].cache_collect = value
 
         for master, value in self.cache.get_collect_count_failed().items():
-            metric.cache_collect_failed = value
-            metric.add_label(MASTER, master)
+            if master not in metrics:
+                metrics[master] = IBMetric()
+                metrics[master].add_label(MASTER, master)
+            metrics[master].cache_collect_failed = value
 
         for master, value in self.cache.get_collect_time().items():
-            metric.cache_collect_time = value
-            metric.add_label(MASTER, master)
+            if master not in metrics:
+                metrics[master] = IBMetric()
+                metrics[master].add_label(MASTER, master)
+            metrics[master].cache_collect_time = value
+
 
         for master, types in self.cache.get_all().items():
+            if master not in metrics:
+                metrics[master] = IBMetric()
+                metrics[master].add_label(MASTER, master)
+
             for type_name, type in types.items():
                 if type_name == MEMBERS:
-                    metric.cache_members = len(type)
+                    metrics[master].cache_members = len(type)
                 if type_name == NODES:
-                    metric.cache_nodes = len(type)
+                    metrics[master].cache_nodes = len(type)
                 if type_name == ZONES:
-                    metric.cache_zones = len(type)
+                    metrics[master].cache_zones = len(type)
                 if type_name == DHCP_RANGES:
-                    metric.cache_dhcp_ranges = len(type)
-        self.all_metrics.append(metric)
+                    metrics[master].cache_dhcp_ranges = len(type)
+
+        self.all_metrics.extend(list(metrics.values()))
