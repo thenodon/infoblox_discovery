@@ -38,7 +38,7 @@ from prometheus_client.utils import INF, MINUS_INF
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from infoblox_discovery.api import InfoBlox
-from infoblox_discovery.cache import Cache, MEMBERS, NODES, ZONES, DHCP_RANGES, MASTER
+from infoblox_discovery.cache import Cache, MEMBERS, NODES, ZONES, DHCP_RANGES, MASTER, VALID_TYPES
 from infoblox_discovery.collector import InfobloxCollector
 from infoblox_discovery.environments import DISCOVERY_BASIC_AUTH_USERNAME, DISCOVERY_BASIC_AUTH_PASSWORD, \
     DISCOVERY_BASIC_AUTH_ENABLED, DISCOVERY_LOG_LEVEL, DISCOVERY_HOST, DISCOVERY_PORT, DISCOVERY_FETCH_INTERVAL
@@ -287,6 +287,8 @@ async def get_metrics(auth: str = Depends(basic_auth)):
 
 @app.get('/prometheus-sd-targets')
 def discovery(master: str, type: str, auth: str = Depends(basic_auth)):
+    if type not in VALID_TYPES:
+        return Response(json.dumps({'error': 'Not a valid type', 'valid_types': VALID_TYPES}, indent=4), status_code=status.HTTP_400_BAD_REQUEST, media_type=MIME_TYPE_APPLICATION_JSON)
     cache = Cache()
     data = cache.get(master, type)
 

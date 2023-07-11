@@ -10,7 +10,11 @@ MEMBERS='members'
 NODES='nodes'
 ZONES='zones'
 DHCP_RANGES='dhcp_ranges'
+VALID_TYPES = [MEMBERS, NODES, ZONES, DHCP_RANGES]
+
 MASTER='master'
+
+
 class Singleton(type):
     _instances = {}
 
