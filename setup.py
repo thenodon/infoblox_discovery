@@ -29,7 +29,7 @@ setup(
     packages=find_packages(),
     author='thenodon',
     author_email='aha@ingby.com',
-    url='https://github.com/thenodon/infoblox-discovery',
+    url='https://github.com/thenodon/infoblox_discovery',
     license='GPLv3',
     include_package_data=True,
     zip_safe=False,
