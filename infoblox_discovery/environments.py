@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-    Copyright (C) 2023  Anders Håål and VGR
+    Copyright (C) 2023  Anders Håål
 
     This file is part of infoblox-discovery.
 
