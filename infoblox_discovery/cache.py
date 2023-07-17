@@ -63,7 +63,7 @@ class Cache(metaclass=Singleton):
         self._cache[master][type] = data
 
     def get(self, master: str, type: str) -> List[Any]:
-        if time.time() < self._expire:
+        if time.time() < self._expire and type in self._cache[master]:
             log.info_fmt({"operation": "cache", "hit": True})
             return self._cache[master][type]
         log.info_fmt({"operation": "cache", "hit": False})
