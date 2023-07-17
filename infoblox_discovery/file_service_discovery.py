@@ -27,6 +27,7 @@ import yaml
 from infoblox_discovery.environments import DISCOVERY_PROMETHEUS_SD_FILE_DIRECTORY, DISCOVERY_CONFIG
 from infoblox_discovery.api import InfoBlox
 from infoblox_discovery.fmglogging import Log
+from infoblox_discovery.cache import MEMBERS, NODES, ZONES, DHCP_RANGES, DNS_SERVERS
 
 
 log = Log(__name__)
@@ -50,16 +51,17 @@ def file_service_discovery():
 
     for ib in config.get('infoblox'):
         infoblox = InfoBlox(ib)
-        if 'members' in ib.get('discovery'):
-            members, nodes = infoblox.get_infoblox_members()
-            write_sd_file(members, ib['master'], 'members')
-            write_sd_file(nodes, ib['master'], 'nodes')
-        if 'dns' in ib.get('discovery'):
-            dns = infoblox.get_infoblox_zones()
-            write_sd_file(dns, ib['master'], 'dns')
-        if 'dhcp' in ib.get('discovery'):
+        if MEMBERS in ib.get('discovery'):
+            members, nodes, dns_servers = infoblox.get_infoblox_members()
+            write_sd_file(members, ib['master'], MEMBERS)
+            write_sd_file(nodes, ib['master'], NODES)
+            write_sd_file(dns_servers, ib['master'], DNS_SERVERS)
+        if ZONES in ib.get('discovery'):
+            zones = infoblox.get_infoblox_zones()
+            write_sd_file(zones, ib['master'], ZONES)
+        if DHCP_RANGES in ib.get('discovery'):
             dhcp_ranges = infoblox.get_infoblox_dhcp_ranges()
-            write_sd_file(dhcp_ranges, ib['master'], 'dhcp_ranges')
+            write_sd_file(dhcp_ranges, ib['master'], DHCP_RANGES)
 
 
 def write_sd_file(objects, prefix: str, type: str):

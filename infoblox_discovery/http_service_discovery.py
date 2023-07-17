@@ -38,7 +38,7 @@ from prometheus_client.utils import INF, MINUS_INF
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from infoblox_discovery.api import InfoBlox
-from infoblox_discovery.cache import Cache, MEMBERS, NODES, ZONES, DHCP_RANGES, MASTER, VALID_TYPES
+from infoblox_discovery.cache import Cache, MEMBERS, NODES, ZONES, DHCP_RANGES, DNS_SERVERS, MASTER, VALID_TYPES
 from infoblox_discovery.collector import InfobloxCollector
 from infoblox_discovery.environments import DISCOVERY_BASIC_AUTH_USERNAME, DISCOVERY_BASIC_AUTH_PASSWORD, \
     DISCOVERY_BASIC_AUTH_ENABLED, DISCOVERY_LOG_LEVEL, DISCOVERY_HOST, DISCOVERY_PORT, DISCOVERY_FETCH_INTERVAL
@@ -94,9 +94,10 @@ def fill_cache():
         try:
             if MEMBERS in ib.get('discovery'):
                 try:
-                    members, nodes = infoblox.get_infoblox_members()
+                    members, nodes, dns_servers = infoblox.get_infoblox_members()
                     cache.put(ib[MASTER], MEMBERS, list(members.values()))
                     cache.put(ib[MASTER], NODES, list(nodes.values()))
+                    cache.put(ib[MASTER], DNS_SERVERS, list(dns_servers.values()))
                 except DiscoveryException:
                     log.error(f"Failed to get members for {ib[MASTER]}")
 

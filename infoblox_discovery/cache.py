@@ -27,13 +27,14 @@ from infoblox_discovery.fmglogging import Log
 
 log = Log(__name__)
 
-MEMBERS='members'
-NODES='nodes'
-ZONES='zones'
-DHCP_RANGES='dhcp_ranges'
-VALID_TYPES = [MEMBERS, NODES, ZONES, DHCP_RANGES]
+MEMBERS = 'members'
+NODES = 'nodes'
+ZONES = 'zones'
+DNS_SERVERS = 'dns_servers'
+DHCP_RANGES = 'dhcp_ranges'
+VALID_TYPES = [MEMBERS, NODES, ZONES, DHCP_RANGES, DNS_SERVERS]
 
-MASTER='master'
+MASTER = 'master'
 
 
 class Singleton(type):
@@ -54,7 +55,7 @@ class Cache(metaclass=Singleton):
         self._collect_count: Dict[str, int] = {}
         self._collect_time: Dict[str, int] = {}
         self._collect_count_failed: Dict[str, int] = {}
-        self._cache: Dict[str,Dict[str, List]] = {}
+        self._cache: Dict[str, Dict[str, List]] = {}
 
     def put(self, master: str, type: str, data: List[Any]):
         self._expire = time.time() + self._ttl
@@ -63,13 +64,13 @@ class Cache(metaclass=Singleton):
         self._cache[master][type] = data
 
     def get(self, master: str, type: str) -> List[Any]:
-        if time.time() < self._expire and type in self._cache[master]:
+        if time.time() < self._expire and master in self._cache and type in self._cache[master]:
             log.info_fmt({"operation": "cache", "hit": True})
             return self._cache[master][type]
         log.info_fmt({"operation": "cache", "hit": False})
         return []
 
-    def get_all(self) -> Dict[str,Dict[str, List]]:
+    def get_all(self) -> Dict[str, Dict[str, List]]:
         return self._cache
 
     def set_collect_time(self, master, collect_time: int):

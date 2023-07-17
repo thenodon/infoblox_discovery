@@ -27,7 +27,8 @@ from infoblox_client import connector
 
 from infoblox_discovery.fmglogging import Log
 from infoblox_discovery.infoblox_dhcp import DHCP, dhcp_factory
-from infoblox_discovery.infoblox_dns import DNS, dns_factory
+from infoblox_discovery.infoblox_dns_server import DNSServer, dns_server_factory
+from infoblox_discovery.infoblox_zone import Zone, zone_factory
 from infoblox_discovery.infoblox_member import Member, member_factory
 from infoblox_discovery.infoblox_node import Node, node_factory
 from infoblox_discovery.exceptions import DiscoveryException
@@ -66,7 +67,7 @@ class InfoBlox:
                      'http_request_timeout': config.get('timeout', 60)}
         self.conn = connector.Connector(self.opts)
 
-    def get_infoblox_members(self) -> Tuple[Dict[str, Member], Dict[str, Node]]:
+    def get_infoblox_members(self) -> Tuple[Dict[str, Member], Dict[str, Node], Dict[str, DNSServer]]:
 
         return_fields_member = ['host_name', 'service_status', 'platform', 'enable_ha', 'node_info', 'ntp_setting',
                                 'extattrs']
@@ -75,8 +76,10 @@ class InfoBlox:
         except Exception as err:
             log.error(f"Could not fetch members - {str(err)}")
             raise DiscoveryException(f"Could not fetch members")
+
         members: Dict[str, Member] = {}
         nodes: Dict[str, Node] = {}
+        dns_servers: Dict[str: DNSServer] = {}
 
         for member_data in members_data:
             if self.exclusions[COMMON] in member_data['extattrs'] and \
@@ -95,9 +98,14 @@ class InfoBlox:
                     node = node_factory(node, member.host_name, self.master)
                     nodes[node.ip] = node
 
-        return members, nodes
+            for service in member_data['service_status']:
+                if service['service'] == 'DNS' and service['status'] == 'WORKING':
+                    dns_server = dns_server_factory(member.host_name, self.master)
+                    dns_servers[member.host_name] = dns_server
 
-    def get_infoblox_zones(self) -> Dict[str, DNS]:
+        return members, nodes, dns_servers
+
+    def get_infoblox_zones(self) -> Dict[str, Zone]:
         return_fields_range = ['fqdn', 'disable', 'extattrs']
         query = {'view': 'External'}
         try:
@@ -106,7 +114,7 @@ class InfoBlox:
             log.error(f"Could not fetch zones - {str(err)}")
             raise DiscoveryException(f"Could not fetch zones")
 
-        all_dns: Dict[str: DNS] = {}
+        all_zones: Dict[str: Zone] = {}
         for zone_data in zones_data:
             log.debug(f"Dns zone {zone_data['fqdn']}")
             if self.exclusions[COMMON] in zone_data['extattrs'] and \
@@ -132,10 +140,10 @@ class InfoBlox:
                 zone['name'] = zone_data['fqdn']
                 zone['address'] = zone_data['fqdn'].encode('idna').decode("utf-8")
 
-            dns = dns_factory(zone['name'], self.master)
-            all_dns[dns.dns] = dns
+            z = zone_factory(zone['name'], self.master)
+            all_zones[z.zone] = z
 
-        return all_dns
+        return all_zones
 
     def get_infoblox_dhcp_ranges(self) -> Dict[str, DHCP]:
         return_fields_range = ['network', 'dhcp_utilization', 'dhcp_utilization_status', 'extattrs']
@@ -165,3 +173,15 @@ class InfoBlox:
             dhcp_ranges[dhcp.network] = dhcp
 
         return dhcp_ranges
+
+    def get_fqdn_by_network(self, network):
+        return_fields_range = ['ip_address,names', 'objects', 'types']
+        query = {'network': network}
+        all_names = self.conn.get_object('ipv4address', query, return_fields=return_fields_range)
+
+        names = []
+        for name in all_names:
+            if 'HOST' in name['types']:
+                names.extend(name['names'])
+
+        return names
