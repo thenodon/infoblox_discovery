@@ -31,6 +31,7 @@ from infoblox_discovery.infoblox_dns_server import DNSServer, dns_server_factory
 from infoblox_discovery.infoblox_zone import Zone, zone_factory
 from infoblox_discovery.infoblox_member import Member, member_factory
 from infoblox_discovery.infoblox_node import Node, node_factory
+from infoblox_discovery.infoblox_webendpoint import WebEndpoint, webendpoint_factory
 from infoblox_discovery.exceptions import DiscoveryException
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -174,7 +175,20 @@ class InfoBlox:
 
         return dhcp_ranges
 
-    def get_fqdn_by_network(self, network):
+    def get_web_endpoints_by_networks(self, network)-> Dict[str, WebEndpoint]:
+
+        fqdn_by_network = self._get_fqdn_by_network(network)
+        web_endpoints: Dict[str, WebEndpoint] = {}
+        for fqdn in fqdn_by_network:
+            res = self._get_endpoint(fqdn)
+            for dns in res:
+                if 'External' in dns['_ref'] and 'dns_aliases' in dns:
+                    for alias in dns['dns_aliases']:
+                        web_endpoints[alias] = webendpoint_factory(alias, master=self.master)
+
+        return web_endpoints
+
+    def _get_fqdn_by_network(self, network):
         return_fields_range = ['ip_address,names', 'objects', 'types']
         query = {'network': network}
         all_names = self.conn.get_object('ipv4address', query, return_fields=return_fields_range)
@@ -185,3 +199,9 @@ class InfoBlox:
                 names.extend(name['names'])
 
         return names
+
+    def _get_endpoint(self, dns_fqdn):
+        return_fields_range = ['dns_aliases']
+        query = {'name': dns_fqdn}
+        dns = self.conn.get_object('record:host', query, return_fields=return_fields_range)
+        return dns

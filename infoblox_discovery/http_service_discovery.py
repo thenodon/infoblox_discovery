@@ -38,7 +38,7 @@ from prometheus_client.utils import INF, MINUS_INF
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from infoblox_discovery.api import InfoBlox
-from infoblox_discovery.cache import Cache, MEMBERS, NODES, ZONES, DHCP_RANGES, DNS_SERVERS, MASTER, VALID_TYPES
+from infoblox_discovery.cache import Cache, MEMBERS, NODES, ZONES, DHCP_RANGES, DNS_SERVERS, MASTER, WEB_ENDPOINTS, VALID_TYPES
 from infoblox_discovery.collector import InfobloxCollector
 from infoblox_discovery.environments import DISCOVERY_BASIC_AUTH_USERNAME, DISCOVERY_BASIC_AUTH_PASSWORD, \
     DISCOVERY_BASIC_AUTH_ENABLED, DISCOVERY_LOG_LEVEL, DISCOVERY_HOST, DISCOVERY_PORT, DISCOVERY_FETCH_INTERVAL
@@ -112,6 +112,15 @@ def fill_cache():
                 try:
                     dhcp_ranges = infoblox.get_infoblox_dhcp_ranges()
                     cache.put(ib[MASTER], DHCP_RANGES, list(dhcp_ranges.values()))
+                except DiscoveryException:
+                    log.error(f"Failed to get dhcp ranges for {ib[MASTER]}")
+
+            if WEB_ENDPOINTS in ib.get('discovery') and ib.get(WEB_ENDPOINTS):
+                try:
+                    for network in ib.get(WEB_ENDPOINTS).get('networks'):
+                        print(network)
+                        web_endpoints = infoblox.get_web_endpoints_by_networks(network)
+                        cache.put(ib[MASTER], WEB_ENDPOINTS, list(web_endpoints.values()))
                 except DiscoveryException:
                     log.error(f"Failed to get dhcp ranges for {ib[MASTER]}")
 
