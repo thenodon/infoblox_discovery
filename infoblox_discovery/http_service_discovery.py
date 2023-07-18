@@ -118,7 +118,6 @@ def fill_cache():
             if WEB_ENDPOINTS in ib.get('discovery') and ib.get(WEB_ENDPOINTS):
                 try:
                     for network in ib.get(WEB_ENDPOINTS).get('networks'):
-                        print(network)
                         web_endpoints = infoblox.get_web_endpoints_by_networks(network)
                         cache.put(ib[MASTER], WEB_ENDPOINTS, list(web_endpoints.values()))
                 except DiscoveryException:
@@ -126,7 +125,7 @@ def fill_cache():
 
             end_time = time.time()
             cache.set_collect_time(ib[MASTER], int(end_time - start_time))
-            log.info(f"collect infoblox discovery from {ib[MASTER]} {end_time-start_time} sec")
+            log.info(f"Collect infoblox discovery from {ib[MASTER]} {end_time-start_time} sec")
         except DiscoveryException:
             cache.inc_collect_count_failed(ib[MASTER])
         finally:
