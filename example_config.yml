@@ -1,0 +1,33 @@
+# Example configuration file
+infoblox:
+  -
+    master: infoblox.master.com
+    wapi_version: 2.10.5
+    username: foo
+    password: bar
+    discovery:
+      # members include discovery of members, nodes and dns_servers
+      - members
+      # discover infoblox zones
+      - zones
+      # discover dhcp ranges that are not excluded in section exclude_ranges
+      - dhcp_ranges
+      # discover web endpoints from the networks defined in
+      - web_endpoints
+    # the exclusion label work as general as exclusion
+    # for dns as zone-exclusion
+    # for dhcp as range-exclusion
+    # The exclusion work by using extattrs to set a label and the value to True
+    # if the exclusion_label is set it will prefix above with defined below
+    exclusion_label: exclude-discovery
+
+    # Networks subject to detect web endpoints
+    web_endpoints:
+      networks:
+        - 192.91.218.0/24
+
+    # Infoblox dhcp range prefix to exclude
+    exclude_ranges:
+      # A.B.C.0/29
+      - 29
+      - 30
