@@ -152,8 +152,13 @@ async def optional_security(request: Request):
 
 
 async def basic_auth(credentials: HTTPBasicCredentials = Depends(optional_security)) -> bool:
-    if not os.getenv(DISCOVERY_BASIC_AUTH_ENABLED) or os.getenv(DISCOVERY_BASIC_AUTH_ENABLED) == "false":
-        return True
+
+    if not os.getenv(DISCOVERY_BASIC_AUTH_USERNAME) or not os.getenv(DISCOVERY_BASIC_AUTH_USERNAME):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
 
     current_username_bytes = credentials.username.encode("utf8")
     correct_username_bytes = bytes(os.getenv(DISCOVERY_BASIC_AUTH_USERNAME), 'utf-8')
