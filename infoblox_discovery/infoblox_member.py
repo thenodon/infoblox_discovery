@@ -20,6 +20,7 @@
 """
 
 from typing import Dict, Any, Tuple
+from infoblox_discovery.meta_naming import meta_label_name
 
 
 class Member:
@@ -32,7 +33,7 @@ class Member:
         labels: Dict[str, str] = {}
         for k, v in self.__dict__.items():
             if k != "host_name":
-                labels[k] = v
+                labels[meta_label_name(k)] = v
         return labels
 
     def valid(self) -> Tuple[bool, str]:

@@ -19,30 +19,9 @@
 
 """
 
-from typing import Dict, Any, Tuple
-from infoblox_discovery.meta_naming import meta_label_name
+
+meta_label_prefix = '__meta_infoblox_'
 
 
-class Zone:
-    def __init__(self, zone: str):
-        self.zone: str = zone
-        self.master: str = ''
-
-    def _as_labels(self) -> Dict[str, str]:
-        labels: Dict[str, str] = {}
-        for k, v in self.__dict__.items():
-            if k != "zone":
-                labels[meta_label_name(k)] = v
-        return labels
-
-    def valid(self) -> Tuple[bool, str]:
-        return True, ""
-
-    def as_prometheus_file_sd_entry(self) -> Dict[str, Any]:
-        return {'targets': [f"{self.zone}"], 'labels': self._as_labels()}
-
-
-def zone_factory(zone_name: str, master: str) -> Zone:
-    zone = Zone(zone=zone_name)
-    zone.master = master
-    return zone
+def meta_label_name(name: str) -> str:
+    return f"{meta_label_prefix}{name}"

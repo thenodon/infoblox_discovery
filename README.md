@@ -13,6 +13,8 @@ The current supporter objects are:
 - zones
 - web_endpoints
 
+# Labels naming (since 0.2.0)
+All labels are returned prefixed as `__meta_infoblox_`
 
 # Design
 The infoblox-discovery can run in 2 modes, as file discovery or as http discovery.

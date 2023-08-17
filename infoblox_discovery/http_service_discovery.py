@@ -266,7 +266,7 @@ def generate_latest(metrics_list: list):
     return ''.join(output).encode('utf-8')
 
 
-@app.get('/')
+@app.get('/alive')
 async def alive(request: Request):
     return Response("infoblox_discovery alive!", status_code=status.HTTP_200_OK, media_type=MIME_TYPE_TEXT_HTML)
 
@@ -301,17 +301,20 @@ async def get_metrics(auth: str = Depends(basic_auth)):
 
 @app.get('/prometheus-sd-targets')
 def discovery(master: str, type: str, auth: str = Depends(basic_auth)):
-    if type not in VALID_TYPES:
-        return Response(json.dumps({'error': 'Not a valid type', 'valid_types': VALID_TYPES}, indent=4), status_code=status.HTTP_400_BAD_REQUEST, media_type=MIME_TYPE_APPLICATION_JSON)
-    cache = Cache()
-    data = cache.get(master, type)
+    try:
+        if type not in VALID_TYPES:
+            return Response(json.dumps({'error': 'Not a valid type', 'valid_types': VALID_TYPES}, indent=4), status_code=status.HTTP_400_BAD_REQUEST, media_type=MIME_TYPE_APPLICATION_JSON)
+        cache = Cache()
+        data = cache.get(master, type)
 
-    prometheus_sd: List[Any] = []
-    for d in data:
-        prometheus_sd.append(d.as_prometheus_file_sd_entry())
+        prometheus_sd: List[Any] = []
+        for d in data:
+            prometheus_sd.append(d.as_prometheus_file_sd_entry())
 
-    targets = json.dumps(prometheus_sd, indent=4)
-    return Response(targets, status_code=status.HTTP_200_OK, media_type=MIME_TYPE_APPLICATION_JSON)
+        targets = json.dumps(prometheus_sd, indent=4)
+        return Response(targets, status_code=status.HTTP_200_OK, media_type=MIME_TYPE_APPLICATION_JSON)
+    except Exception as err:
+        print(err)
 
 
 def http_service_discovery():
