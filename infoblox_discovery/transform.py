@@ -23,9 +23,6 @@ import abc
 from typing import List
 
 from infoblox_discovery.exceptions import DiscoveryException
-from infoblox_discovery.fmglogging import Log
-
-log = Log(__name__)
 
 
 class LabelsBase:

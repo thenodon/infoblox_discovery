@@ -26,8 +26,6 @@ from infoblox_discovery.meta_naming import meta_label_name
 class DNSServer:
     def __init__(self, host_name: str):
         self.host_name: str = host_name
-        #self.ip: str = ip
-        #self.ha_node_of: str = ""
         self.master: str = ''
 
     def _as_labels(self) -> Dict[str, str]:
@@ -46,7 +44,5 @@ class DNSServer:
 
 def dns_server_factory(host_name: str, master: str) -> DNSServer:
     dns_server = DNSServer(host_name)
-    # node.ha_status = node_data['ha_status']
-    #node.ha_node_of = member_host_name
     dns_server.master = master
     return dns_server

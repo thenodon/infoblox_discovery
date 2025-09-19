@@ -9,3 +9,4 @@ prometheus-fastapi-instrumentator
 setuptools~=67.7.2
 infoblox-client==0.6.0
 IPy==1.01
+logfmter

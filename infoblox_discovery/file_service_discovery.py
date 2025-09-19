@@ -20,26 +20,22 @@
 """
 
 import os
-from typing import List, Dict, Any
+from typing import List, Any
 
 import yaml
-
+import logging as log
 from infoblox_discovery.environments import DISCOVERY_PROMETHEUS_SD_FILE_DIRECTORY, DISCOVERY_CONFIG
 from infoblox_discovery.api import InfoBlox
-from infoblox_discovery.fmglogging import Log
 from infoblox_discovery.cache import MEMBERS, NODES, ZONES, DHCP_RANGES, DNS_SERVERS
-
-
-log = Log(__name__)
 
 
 def file_service_discovery():
     # Run for as file service discovery
     if not os.getenv(DISCOVERY_PROMETHEUS_SD_FILE_DIRECTORY):
-        print(f"Env {DISCOVERY_PROMETHEUS_SD_FILE_DIRECTORY} must be set to a existing directory path")
+        log.error(f"Env {DISCOVERY_PROMETHEUS_SD_FILE_DIRECTORY} must be set to a existing directory path")
         exit(1)
     if not os.path.exists(os.getenv(DISCOVERY_PROMETHEUS_SD_FILE_DIRECTORY)):
-        print(f"Directory {DISCOVERY_PROMETHEUS_SD_FILE_DIRECTORY} does not exists")
+        log.error(f"Directory {DISCOVERY_PROMETHEUS_SD_FILE_DIRECTORY} does not exists")
         exit(1)
     with open(os.getenv(DISCOVERY_CONFIG, 'config.yml'), 'r') as config_file:
         try:
@@ -47,7 +43,7 @@ def file_service_discovery():
             config = yaml.safe_load(config_file)
 
         except yaml.YAMLError as err:
-            print(err)
+            log.error("Parse config", extra={"error": str(err)})
 
     for ib in config.get('infoblox'):
         infoblox = InfoBlox(ib)
@@ -74,4 +70,4 @@ def write_sd_file(objects, prefix: str, type: str):
         try:
             yaml.safe_dump(prometheus_file_sd, config_file)
         except yaml.YAMLError as err:
-            print(err)
+            log.error("Write prometheus file sd", extra={"error": str(err)})

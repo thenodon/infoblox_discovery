@@ -22,10 +22,10 @@
 from typing import Dict, Tuple
 
 import urllib3
+import logging as log
 from IPy import IP
 from infoblox_client import connector
 
-from infoblox_discovery.fmglogging import Log
 from infoblox_discovery.infoblox_dhcp import DHCP, dhcp_factory
 from infoblox_discovery.infoblox_dns_server import DNSServer, dns_server_factory
 from infoblox_discovery.infoblox_zone import Zone, zone_factory
@@ -36,7 +36,6 @@ from infoblox_discovery.exceptions import DiscoveryException
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-log = Log(__name__)
 COMMON = "common"
 MEMBER = "member"
 ZONE = "zone"
@@ -45,12 +44,9 @@ RANGE = "range"
 
 class InfoBlox:
     def __init__(self, config):
-        # self.username = config.get('username')
-        # self.password = config.get('password')
+
         self.master = config.get('master')
 
-        # self.wapi_version = config.get('wapi_version')
-        # self.timeout = config.get('timeout', 60)
         self.exclude_ranges = config.get('exclude_ranges')
         self.exclusion_label = ''
         if config.get('exclusion_label', '') != '':
@@ -69,14 +65,13 @@ class InfoBlox:
         self.conn = connector.Connector(self.opts)
 
     def get_infoblox_members(self) -> Tuple[Dict[str, Member], Dict[str, Node], Dict[str, DNSServer]]:
-
         return_fields_member = ['host_name', 'service_status', 'platform', 'enable_ha', 'node_info', 'ntp_setting',
                                 'extattrs']
         try:
             members_data = self.conn.get_object('member', return_fields=return_fields_member)
         except Exception as err:
-            log.error(f"Could not fetch members - {str(err)}")
-            raise DiscoveryException(f"Could not fetch members")
+            log.error("Fetch members", extra={"error": str(err)})
+            raise DiscoveryException("Could not fetch members")
 
         members: Dict[str, Member] = {}
         nodes: Dict[str, Node] = {}
@@ -104,6 +99,7 @@ class InfoBlox:
                     dns_server = dns_server_factory(member.host_name, self.master)
                     dns_servers[member.host_name] = dns_server
 
+        log.info("Discovered from object member", extra={"members": len(members), "nodes": len(nodes), "dns": len(dns_servers)})
         return members, nodes, dns_servers
 
     def get_infoblox_zones(self) -> Dict[str, Zone]:
@@ -113,7 +109,7 @@ class InfoBlox:
             zones_data = self.conn.get_object('zone_auth', query, return_fields=return_fields_range)
         except Exception as err:
             log.error(f"Could not fetch zones - {str(err)}")
-            raise DiscoveryException(f"Could not fetch zones")
+            raise DiscoveryException("Could not fetch zones")
 
         all_zones: Dict[str: Zone] = {}
         for zone_data in zones_data:
@@ -143,7 +139,7 @@ class InfoBlox:
 
             z = zone_factory(zone['name'], self.master)
             all_zones[z.zone] = z
-
+        log.info("Discovered from object zone_auth", extra={"zones": len(all_zones)})
         return all_zones
 
     def get_infoblox_dhcp_ranges(self) -> Dict[str, DHCP]:
@@ -154,7 +150,7 @@ class InfoBlox:
             dhcp_ranges_data = self.conn.get_object('range', query, return_fields=return_fields_range, paging=True)
         except Exception as err:
             log.error(f"Could not get dhcp ranges, {str(err)}")
-            raise DiscoveryException(f"Could not fetch dhcp ranges")
+            raise DiscoveryException("Could not fetch dhcp ranges")
         dhcp_ranges: Dict[str, DHCP] = {}
         for dhcp_range in dhcp_ranges_data:
             if self.exclusions[COMMON] in dhcp_range['extattrs'] and \
@@ -173,9 +169,10 @@ class InfoBlox:
             dhcp = dhcp_factory(dhcp_range['network'], self.master)
             dhcp_ranges[dhcp.network] = dhcp
 
+        log.info("Discovered from object range", extra={"dhcp_ranges": len(dhcp_ranges)})
         return dhcp_ranges
 
-    def get_web_endpoints_by_networks(self, network)-> Dict[str, WebEndpoint]:
+    def get_web_endpoints_by_networks(self, network) -> Dict[str, WebEndpoint]:
 
         fqdn_by_network = self._get_fqdn_by_network(network)
         web_endpoints: Dict[str, WebEndpoint] = {}
@@ -185,7 +182,7 @@ class InfoBlox:
                 if 'External' in dns['_ref'] and 'dns_aliases' in dns:
                     for alias in dns['dns_aliases']:
                         web_endpoints[alias] = webendpoint_factory(alias, master=self.master)
-
+        log.info("Discovered from object record:host", extra={"web_endpoints": len(web_endpoints)})
         return web_endpoints
 
     def _get_fqdn_by_network(self, network):
@@ -198,6 +195,7 @@ class InfoBlox:
             if 'HOST' in name['types']:
                 names.extend(name['names'])
 
+        log.info("Discovered from object ipv4address", extra={"fqdns": len(names)})
         return names
 
     def _get_endpoint(self, dns_fqdn):
