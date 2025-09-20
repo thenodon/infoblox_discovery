@@ -45,6 +45,11 @@ See the `example_config.yml` file.
 
 
 # Run 
+The infoblox-discovery is available on PyPI and can be installed using pip:
+```shell
+pip install infoblox-discovery
+```
+
 ## Environment variables 
 - INFOBLOX_DISCOVERY_CONFIG - the configuration file, default to `config.yml`
 - INFOBLOX_DISCOVERY_PROMETHEUS_SD_FILE_DIRECTORY - the directory where file discovery based 
