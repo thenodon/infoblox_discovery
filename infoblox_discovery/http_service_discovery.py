@@ -73,7 +73,11 @@ def fill_cache():
     cache = Cache()
     for ib in config.get('infoblox'):
         start_time = time.time()
-        infoblox = InfoBlox(ib)
+        try:
+            infoblox = InfoBlox(ib)
+        except DiscoveryException as err:
+            log.error("Failed to create infoblox connection", extra={"error": str(err), "master": ib.get(MASTER, 'n/a')})
+            continue
         try:
             if MEMBERS in ib.get('discovery'):
                 try:
@@ -283,7 +287,7 @@ async def get_metrics(auth: str = Depends(basic_auth)):
 
 
 @app.get('/prometheus-sd-targets')
-def discovery(master: str, type: str, auth: str = Depends(basic_auth)):
+async def discovery(master: str, type: str, auth: str = Depends(basic_auth)):
     try:
         if type not in VALID_TYPES:
             return Response(json.dumps({'error': 'Not a valid type', 'valid_types': VALID_TYPES}, indent=4), status_code=status.HTTP_400_BAD_REQUEST, media_type=MIME_TYPE_APPLICATION_JSON)
