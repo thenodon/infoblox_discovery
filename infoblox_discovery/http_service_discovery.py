@@ -20,7 +20,7 @@
 """
 import datetime
 import json
-import logging.config as lc
+import logging
 import math
 import os
 import secrets
@@ -28,6 +28,7 @@ import time
 from typing import List, Any
 
 import uvicorn
+from uvicorn.config import LOGGING_CONFIG
 import yaml
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Request, Response, Depends, HTTPException, status
@@ -44,30 +45,11 @@ from infoblox_discovery.environments import DISCOVERY_BASIC_AUTH_USERNAME, DISCO
     DISCOVERY_BASIC_AUTH_ENABLED, DISCOVERY_LOG_LEVEL, DISCOVERY_HOST, DISCOVERY_PORT, DISCOVERY_FETCH_INTERVAL
 from infoblox_discovery.environments import DISCOVERY_CONFIG
 from infoblox_discovery.exceptions import DiscoveryException
-from infoblox_discovery.fmglogging import Log
+import logging as log
 
-FORMAT = 'timestamp="%(asctime)s" level=%(levelname)s module="%(module)s" %(message)s'
-TIME_FORMAT = "%Y-%m-%dT%H:%M:%S%z"
-lc.dictConfig({
-    'version': 1,
-    'formatters': {'default': {
-        'format': FORMAT,
-        'datefmt': TIME_FORMAT
-    }},
-    'handlers': {'wsgi': {
-        'class': 'logging.StreamHandler',
-        'stream': 'ext://sys.stdout',
-        'formatter': 'default'
-    }},
-    'root': {
-        'level': os.getenv(DISCOVERY_LOG_LEVEL, 'WARNING'),
-        'handlers': ['wsgi']
-    }
-})
 
 MIME_TYPE_TEXT_HTML = 'text/html'
 MIME_TYPE_APPLICATION_JSON = 'application/json'
-log = Log(__name__)
 
 app = FastAPI()
 
@@ -78,19 +60,24 @@ def fill_cache():
     The configuration file is read every time
     :return:
     """
+
     with open(os.getenv(DISCOVERY_CONFIG, 'config.yml'), 'r') as config_file:
         try:
             # Converts yaml document to python object
             config = yaml.safe_load(config_file)
 
         except yaml.YAMLError as err:
-            log.error(f"Can not open configuration file {config_file.name} {str(err)}")
+            log.error("Can not open configuration file", extra={"file_name": config_file.name, "error": str(err)})
             return
 
     cache = Cache()
     for ib in config.get('infoblox'):
         start_time = time.time()
-        infoblox = InfoBlox(ib)
+        try:
+            infoblox = InfoBlox(ib)
+        except DiscoveryException as err:
+            log.error("Failed to create infoblox connection", extra={"error": str(err), "master": ib.get(MASTER, 'n/a')})
+            continue
         try:
             if MEMBERS in ib.get('discovery'):
                 try:
@@ -99,21 +86,21 @@ def fill_cache():
                     cache.put(ib[MASTER], NODES, list(nodes.values()))
                     cache.put(ib[MASTER], DNS_SERVERS, list(dns_servers.values()))
                 except DiscoveryException:
-                    log.error(f"Failed to get members for {ib[MASTER]}")
+                    log.error("Failed to get members", extra={"master": ib[MASTER]})
 
             if ZONES in ib.get('discovery'):
                 try:
                     dns = infoblox.get_infoblox_zones()
                     cache.put(ib[MASTER], ZONES, list(dns.values()))
                 except DiscoveryException:
-                    log.error(f"Failed to get zones for {ib[MASTER]}")
+                    log.error("Failed to get zones", extra={"master": ib[MASTER]})
 
             if DHCP_RANGES in ib.get('discovery'):
                 try:
                     dhcp_ranges = infoblox.get_infoblox_dhcp_ranges()
                     cache.put(ib[MASTER], DHCP_RANGES, list(dhcp_ranges.values()))
                 except DiscoveryException:
-                    log.error(f"Failed to get dhcp ranges for {ib[MASTER]}")
+                    log.error("Failed to get dhcp ranges", extra={"master": ib[MASTER]})
 
             if WEB_ENDPOINTS in ib.get('discovery') and ib.get(WEB_ENDPOINTS):
                 try:
@@ -121,11 +108,11 @@ def fill_cache():
                         web_endpoints = infoblox.get_web_endpoints_by_networks(network)
                         cache.put(ib[MASTER], WEB_ENDPOINTS, list(web_endpoints.values()))
                 except DiscoveryException:
-                    log.error(f"Failed to get dhcp ranges for {ib[MASTER]}")
+                    log.error("Failed to get dhcp ranges", extra={"master": ib[MASTER]})
 
             end_time = time.time()
             cache.set_collect_time(ib[MASTER], int(end_time - start_time))
-            log.info(f"Collect infoblox discovery from {ib[MASTER]} {end_time-start_time} sec")
+            log.info("Collect infoblox discovery", extra={"master": ib[MASTER], "exec_time_seconds": end_time - start_time})
         except DiscoveryException:
             cache.inc_collect_count_failed(ib[MASTER])
         finally:
@@ -291,16 +278,16 @@ async def get_metrics(auth: str = Depends(basic_auth)):
         duration.set(time.time() - start_time)
         return Response(infoblox_metrics, status_code=200, media_type=CONTENT_TYPE_LATEST)
     except DiscoveryException as err:
-        log.error(err.message)
+        log.error("Failed to get metrics", extra={"error": str(err)})
         return Response(err.message, status_code=err.status, media_type=MIME_TYPE_TEXT_HTML)
     except Exception as err:
-        log.error(f"Failed to create metrics - err: {str(err)}")
-        return Response(f"Internal server error for - please check logs", status_code=500,
+        log.error("Failed to get metrics", extra={"error": str(err)})
+        return Response("Internal server error for - please check logs", status_code=500,
                         media_type=MIME_TYPE_TEXT_HTML)
 
 
 @app.get('/prometheus-sd-targets')
-def discovery(master: str, type: str, auth: str = Depends(basic_auth)):
+async def discovery(master: str, type: str, auth: str = Depends(basic_auth)):
     try:
         if type not in VALID_TYPES:
             return Response(json.dumps({'error': 'Not a valid type', 'valid_types': VALID_TYPES}, indent=4), status_code=status.HTTP_400_BAD_REQUEST, media_type=MIME_TYPE_APPLICATION_JSON)
@@ -314,16 +301,17 @@ def discovery(master: str, type: str, auth: str = Depends(basic_auth)):
         targets = json.dumps(prometheus_sd, indent=4)
         return Response(targets, status_code=status.HTTP_200_OK, media_type=MIME_TYPE_APPLICATION_JSON)
     except Exception as err:
-        print(err)
+        log.error("Failed to get prometheus sd targets", extra={"error": str(err)})
+        return Response(None, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, media_type=MIME_TYPE_APPLICATION_JSON)
 
 
 def http_service_discovery():
-    log_config = uvicorn.config.LOGGING_CONFIG
-    log_config["formatters"]["access"]["fmt"] = FORMAT
-    log_config["formatters"]["access"]['datefmt'] = TIME_FORMAT
-    log_config["formatters"]["default"]["fmt"] = FORMAT
-    log_config["formatters"]["default"]['datefmt'] = TIME_FORMAT
-    log_config["loggers"]["uvicorn.access"]["level"] = os.getenv(DISCOVERY_LOG_LEVEL, 'WARNING')
+    logging.Formatter.converter = time.gmtime
+    log_config = LOGGING_CONFIG.copy()
+    log_config["formatters"]["default"]["fmt"] = "at=%(levelname)s when=%(asctime)s msg=\"%(message)s\""
+    log_config["formatters"]["default"]["datefmt"] = "%Y-%m-%dT%H:%M:%SZ"
+    log_config["formatters"]["access"]["fmt"] = "at=%(levelname)s when=%(asctime)s msg=\"%(client_addr)s - %(request_line)s\" status=%(status_code)s"
+    log_config["formatters"]["access"]["datefmt"] = "%Y-%m-%dT%H:%M:%SZ"
 
     uvicorn.run(app, host=os.getenv(DISCOVERY_HOST, "0.0.0.0"), port=os.getenv(DISCOVERY_PORT, 9694),
                 log_config=log_config)

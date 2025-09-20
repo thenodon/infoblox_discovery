@@ -42,7 +42,7 @@ class DHCP:
         return {'targets': [f"{self.network}"], 'labels': self._as_labels()}
 
 
-def dhcp_factory(network: str, master:str) -> DHCP:
+def dhcp_factory(network: str, master: str) -> DHCP:
     node = DHCP(network)
     node.master = master
 

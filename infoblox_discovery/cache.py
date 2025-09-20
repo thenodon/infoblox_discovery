@@ -21,11 +21,10 @@
 
 import os
 import time
+import logging as log
 from typing import Dict, List, Any
 from infoblox_discovery.environments import DISCOVERY_CACHE_TTL
-from infoblox_discovery.fmglogging import Log
 
-log = Log(__name__)
 
 MEMBERS = 'members'
 NODES = 'nodes'
@@ -66,9 +65,9 @@ class Cache(metaclass=Singleton):
 
     def get(self, master: str, type: str) -> List[Any]:
         if time.time() < self._expire and master in self._cache and type in self._cache[master]:
-            log.info_fmt({"operation": "cache", "hit": True})
+            log.info("Cache", extra={"hit": True})
             return self._cache[master][type]
-        log.info_fmt({"operation": "cache", "hit": False})
+        log.info("Cache", extra={"hit": False})
         return []
 
     def get_all(self) -> Dict[str, Dict[str, List]]:

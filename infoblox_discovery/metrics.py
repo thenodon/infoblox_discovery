@@ -19,19 +19,15 @@
 
 """
 
-from typing import Dict, List, Any
+from typing import Dict, List
 
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.metrics_core import Metric, CounterMetricFamily
 
 from infoblox_discovery.cache import Cache, MASTER, MEMBERS, NODES, ZONES, DHCP_RANGES
-from infoblox_discovery.fmglogging import Log
+
 
 from infoblox_discovery.transform import Transform, LabelsBase
-
-# Constants to map response data
-
-log = Log(__name__)
 
 
 class IBMetricDefinition:
@@ -50,16 +46,16 @@ class IBMetricDefinition:
         metric_definition = {
             "cache_collect":
                 CounterMetricFamily(name=f"{IBMetricDefinition.prefix}cache_collect",
-                                  documentation=f"{IBMetricDefinition.help_prefix}total collect count",
-                                  labels=common_labels),
+                                    documentation=f"{IBMetricDefinition.help_prefix}total collect count",
+                                    labels=common_labels),
             "cache_collect_failed":
                 CounterMetricFamily(name=f"{IBMetricDefinition.prefix}cache_collect_failed",
                                     documentation=f"{IBMetricDefinition.help_prefix}total failed collect count",
                                     labels=common_labels),
             "cache_collect_time":
                 GaugeMetricFamily(name=f"{IBMetricDefinition.prefix}cache_collect_time",
-                                    documentation=f"{IBMetricDefinition.help_prefix}time to collect",
-                                    labels=common_labels),
+                                  documentation=f"{IBMetricDefinition.help_prefix}time to collect",
+                                  labels=common_labels),
             "cache_members":
                 CounterMetricFamily(name=f"{IBMetricDefinition.prefix}cache_members",
                                     documentation=f"{IBMetricDefinition.help_prefix}number of members",
@@ -94,7 +90,7 @@ class IBMetric(IBMetricDefinition.Labels):
 
 
 class InfobloxMetrics(Transform):
-    def __init__(self, cache:Cache):
+    def __init__(self, cache: Cache):
         self.cache = cache
         self.all_metrics: List[IBMetric] = []
 
@@ -111,7 +107,6 @@ class InfobloxMetrics(Transform):
 
     def parse(self):
         metrics: Dict[str, IBMetric] = {}
-
 
         for master, value in self.cache.get_collect_count().items():
             if master not in metrics:
@@ -130,7 +125,6 @@ class InfobloxMetrics(Transform):
                 metrics[master] = IBMetric()
                 metrics[master].add_label(MASTER, master)
             metrics[master].cache_collect_time = value
-
 
         for master, types in self.cache.get_all().items():
             if master not in metrics:

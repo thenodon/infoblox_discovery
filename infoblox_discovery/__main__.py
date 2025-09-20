@@ -20,9 +20,22 @@
 """
 
 import argparse
-
+import time
+import logging
+from logfmter import Logfmter
 from infoblox_discovery.file_service_discovery import file_service_discovery
 from infoblox_discovery.http_service_discovery import http_service_discovery
+
+logging.Formatter.converter = time.gmtime
+formatter = Logfmter(
+    keys=["at", "when"],
+    mapping={"at": "levelname", "when": "asctime"},
+    datefmt="%Y-%m-%dT%H:%M:%SZ",
+)
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+
+logging.basicConfig(handlers=[handler], level=logging.INFO)
 
 
 if __name__ == "__main__":

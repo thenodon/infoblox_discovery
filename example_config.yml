@@ -14,12 +14,23 @@ infoblox:
       - dhcp_ranges
       # discover web endpoints from the networks defined in
       - web_endpoints
-    # the exclusion label work as general as exclusion
-    # for dns as zone-exclusion
-    # for dhcp as range-exclusion
-    # The exclusion work by using extattrs to set a label and the value to True
-    # if the exclusion_label is set it will prefix above with defined below
-    exclusion_label: exclude-discovery
+
+
+    # the exclusion_label is removed and replaced with the exclusion_labels defined below
+
+    # Exclusion labels match labels in extattrs in infoblox and if the label value string is "True" or "true"
+    # it will be excluded.- discovery:
+    # Labels can be defined as common for all types or specific for each object type
+    exclusion_labels:
+      commons:
+        - common-exclusion
+      members:
+        - member-exclusion
+      dhcp_ranges:
+        - dhcp-exclusion
+      zones:
+        # for zones that are "disabled" in Infoblox are by default excluded
+        - zone-exclusion
 
     # Networks subject to detect web endpoints
     web_endpoints:
