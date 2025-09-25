@@ -42,7 +42,7 @@ from infoblox_discovery.api import InfoBlox
 from infoblox_discovery.cache import Cache, MEMBERS, NODES, ZONES, DHCP_RANGES, DNS_SERVERS, MASTER, WEB_ENDPOINTS, VALID_TYPES
 from infoblox_discovery.collector import InfobloxCollector
 from infoblox_discovery.environments import DISCOVERY_BASIC_AUTH_USERNAME, DISCOVERY_BASIC_AUTH_PASSWORD, \
-    DISCOVERY_BASIC_AUTH_ENABLED, DISCOVERY_LOG_LEVEL, DISCOVERY_HOST, DISCOVERY_PORT, DISCOVERY_FETCH_INTERVAL
+    DISCOVERY_BASIC_AUTH_ENABLED, DISCOVERY_HOST, DISCOVERY_PORT, DISCOVERY_FETCH_INTERVAL
 from infoblox_discovery.environments import DISCOVERY_CONFIG
 from infoblox_discovery.exceptions import DiscoveryException
 import logging as log

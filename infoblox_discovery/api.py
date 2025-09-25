@@ -36,7 +36,6 @@ from infoblox_discovery.exceptions import DiscoveryException
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-COMMONS = "commons"
 MEMBERS = "members"
 ZONES = "zones"
 DHCP_RANGES = "dhcp_ranges"
@@ -48,23 +47,22 @@ class InfoBlox:
         self.master = config.get('master')
 
         self.exclude_ranges = config.get('exclude_ranges')
-        self.exclusion_label = ''
-        self.exclusions: Dict[str, List[str]]= {}
-        if config.get('exclusion_label', '') != '':
-            self.exclusion_label = f"{config.get('exclusion_label')}-"
+        self.exclusions: Dict[str, List[str]] = {}
+        self.inclusions: Dict[str, List[str]] = {}
 
         if config.get('exclusion_labels') is not None:
             for exclustion_key, exclustions in config.get('exclusion_labels').items():
-                if exclustion_key not in [COMMONS, MEMBERS, ZONES, DHCP_RANGES]:
+                if exclustion_key not in [MEMBERS, ZONES, DHCP_RANGES]:
                     raise DiscoveryException(f"Invalid exclusion label {exclustion_key}")
 
                 self.exclusions[exclustion_key] = exclustions
 
+        if config.get('inclusion_labels') is not None:
+            for inclustion_key, inclustions in config.get('inclusion_labels').items():
+                if inclustion_key not in [MEMBERS, ZONES, DHCP_RANGES]:
+                    raise DiscoveryException(f"Invalid inclusion label {inclustion_key}")
 
-        #self.exclusions = {COMMONS: f"{self.exclusion_label}exclusion",
-        #                   MEMBERS: f"{self.exclusion_label}member-exclusion",
-        #                   ZONES: f"{self.exclusion_label}zone-exclusion",
-        #                   DHCP_RANGES: f"{self.exclusion_label}range-exclusion"}
+                self.inclusions[inclustion_key] = inclustions
 
         self.opts = {'host': config.get('master'),
                      'username': config.get('username'),
@@ -87,7 +85,7 @@ class InfoBlox:
         dns_servers: Dict[str: DNSServer] = {}
 
         for member_data in members_data:
-            if self.validate_exclusion(member_data['extattrs'], [COMMONS, MEMBERS]):
+            if self.validate_exclusion(member_data['extattrs'], [MEMBERS]):
                 log.info(f"Exclude infoblox member {member_data['host_name']}")
                 continue
 
@@ -108,14 +106,35 @@ class InfoBlox:
         return members, nodes, dns_servers
 
     def validate_exclusion(self, extattrs, exclutions: List[str]) -> bool:
-        try:
-            for exclusion in exclutions:
-                for exclusion_key in self.exclusions[exclusion]:
-                    if exclusion_key in extattrs and extattrs[exclusion_key]['value'] == 'True':
-                        return True
-            return False
-        except Exception as err:
-            log.error(f"Validate exclusion - {str(err)}")
+        if len(extattrs.keys()) > 0:
+            log.debug(f"Extattrs {extattrs}")
+
+        # First check inclusions
+        inclusion_exists = False
+        for inclusion in exclutions:
+            if inclusion in self.inclusions:
+                inclusion_exists = True
+                try:
+                    for inclusion_key in self.inclusions[inclusion]:
+                        if inclusion_key in extattrs and extattrs[inclusion_key]['value'] == 'True':
+                            return False
+                    return True
+                except Exception as err:
+                    log.error(f"Validate inclusion - {str(err)}")
+
+        # Second check exclusions
+        if inclusion_exists:
+            # If inclusion exists and not matched, do not execute exclude logic
+            return True
+        for exclusion in exclutions:
+            if exclusion in self.exclusions:
+                try:
+                    for exclusion_key in self.exclusions[exclusion]:
+                        if exclusion_key in extattrs and extattrs[exclusion_key]['value'] == 'True':
+                            return True
+                    return False
+                except Exception as err:
+                    log.error(f"Validate exclusion - {str(err)}")
 
     def get_infoblox_zones(self) -> Dict[str, Zone]:
         return_fields_range = ['fqdn', 'disable', 'extattrs']
@@ -127,10 +146,13 @@ class InfoBlox:
             raise DiscoveryException("Could not fetch zones")
 
         all_zones: Dict[str: Zone] = {}
+        disabled_zones = 0
         for zone_data in zones_data:
             log.debug(f"Dns zone {zone_data['fqdn']}")
-            if self.validate_exclusion(zone_data['extattrs'], [COMMONS, ZONES]) or \
+            if self.validate_exclusion(zone_data['extattrs'], [ZONES]) or \
                     'disable' in zone_data and zone_data['disable']:
+                if 'disable' in zone_data and zone_data['disable']:
+                    disabled_zones += 1
                 log.debug(f"Exclude dns zone {zone_data['fqdn']}")
                 continue
 
@@ -148,7 +170,7 @@ class InfoBlox:
 
             z = zone_factory(zone['name'], self.master)
             all_zones[z.zone] = z
-        log.info("Discovered from object zone_auth", extra={"zones_infoblox": len(zones_data), "zones_discovery": len(all_zones)})
+        log.info("Discovered from object zone_auth", extra={"zones_infoblox": len(zones_data), "zone_disabled": disabled_zones, "zones_discovery": len(all_zones)})
         return all_zones
 
     def get_infoblox_dhcp_ranges(self) -> Dict[str, DHCP]:
@@ -162,7 +184,7 @@ class InfoBlox:
             raise DiscoveryException("Could not fetch dhcp ranges")
         dhcp_ranges: Dict[str, DHCP] = {}
         for dhcp_range in dhcp_ranges_data:
-            if self.validate_exclusion(dhcp_range['extattrs'], [COMMONS, DHCP_RANGES]):
+            if self.validate_exclusion(dhcp_range['extattrs'], [DHCP_RANGES]):
                 log.debug(f"Exclude dhcp scope {dhcp_range['network']}")
                 continue
 
