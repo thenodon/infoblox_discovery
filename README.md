@@ -43,6 +43,13 @@ configuration file, see below.
 # Configuration
 See the `example_config.yml` file.
 
+## Inclusion and exclusion filters
+To manage what objects to include or exclude from discovery you can use labels defined in extattrs in infoblox.
+Inclusion and exclusion labels work as a filter to only include objects or exclude objects with the defined labels.
+Inclusion labels take precedence over exclusion labels. 
+If inclusion labels are defined for an object type no exclusion labels are applied for that object type.
+Please see the example configuration file, `example_config.yml` for details.
+
 
 # Run 
 The infoblox-discovery is available on PyPI and can be installed using pip:

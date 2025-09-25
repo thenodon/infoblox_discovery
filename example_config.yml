@@ -18,8 +18,29 @@ infoblox:
 
     # the exclusion_label is removed and replaced with the exclusion_labels defined below
 
+    # To manage what objects to include or exclude from discovery you can use labels defined in extattrs in infoblox
+    # Inclusion and exclusion labels work as a filter to only include objects or exclude objects
+    # with the defined labels.
+    # Inclusion labels take precedence over exclusion labels.
+    # If inclusion labels are defined for an object type no excusion labels are applied for that object type.
+
+    # Inclusion labels match labels in extattrs in infoblox and if the label value string is "True" or "true"
+    # it will be included.
+    # Labels can be defined as common for all types or specific for each object type
+    inclusion_labels:
+      commons:
+        - common-inclusion
+      members:
+        - member-inclusion
+      dhcp_ranges:
+        - dhcp-inclusion
+      zones:
+        # for zones that are "disabled" in Infoblox are by default excluded by filter criteria
+        - zone-inclusion
+
+
     # Exclusion labels match labels in extattrs in infoblox and if the label value string is "True" or "true"
-    # it will be excluded.- discovery:
+    # it will be excluded.
     # Labels can be defined as common for all types or specific for each object type
     exclusion_labels:
       commons:
@@ -29,7 +50,7 @@ infoblox:
       dhcp_ranges:
         - dhcp-exclusion
       zones:
-        # for zones that are "disabled" in Infoblox are by default excluded
+        # for zones that are "disabled" in Infoblox are by default excluded by filter criteria
         - zone-exclusion
 
     # Networks subject to detect web endpoints
